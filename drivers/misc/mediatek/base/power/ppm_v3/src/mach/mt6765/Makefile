@@ -24,3 +24,6 @@ obj-y += mtk_ppm_platform.o
 obj-y += mtk_ppm_power_data.o
 # limit calculation algorithm
 obj-y += mtk_ppm_cobra_algo.o
+
+# header mtk_ppm_platform.h lives in this directory (included from ../../inc)
+ccflags-y += -I$(src)
