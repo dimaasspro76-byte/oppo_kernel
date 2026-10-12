@@ -50,6 +50,19 @@ jobs:
             grep -q 'ccflags-y += -I$(src)' "$m" || printf '\nccflags-y += -I$(src)\n' >> "$m"
           done
 
+      - name: Work around local include paths and hardcoded kernel dir name
+        # Some OPPO/MTK sources hardcode ../../../../../kernel-4.19/... and
+        # quoteless local headers that only resolve when the dir is on -I.
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          ln -sfn kernel-src kernel-4.19
+          cd kernel-src
+          for d in $(find drivers sound -name '*.c' -o -name '*.h' 2>/dev/null | xargs -n1 dirname | sort -u); do
+            m="$d/Makefile"
+            [ -f "$m" ] || continue
+            grep -q 'ccflags-y += -I$(src)' "$m" || sed -i '1i ccflags-y += -I$(src)' "$m"
+          done
+
       - name: Build
         # Keep going on errors (make -k) and never fail the job here,
         # so every error is collected in build.log.
@@ -58,7 +71,7 @@ jobs:
         run: |
           make ARCH=arm64 LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu- CLANG_TRIPLE=aarch64-linux-gnu- $DEFCONFIG
           make -k -j$(nproc) ARCH=arm64 LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu- CLANG_TRIPLE=aarch64-linux-gnu- \
-            KCFLAGS="-Wno-error -Wno-error=strict-prototypes -Wno-strict-prototypes -Wno-error=implicit-int -Wno-error=return-type -Wno-error=incompatible-pointer-types -Wno-error=date-time" \
+            KCFLAGS="-Wno-error -Wno-error=strict-prototypes -Wno-strict-prototypes -Wno-error=implicit-int -Wno-error=return-type -Wno-error=incompatible-pointer-types -Wno-error=date-time -Wno-error=void-pointer-to-int-cast" \
             Image.gz-dtb 2>&1 | tee build.log || true
 
       - name: Collect artifacts
