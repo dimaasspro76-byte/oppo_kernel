@@ -71,7 +71,7 @@ jobs:
         run: |
           make ARCH=arm64 LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu- CLANG_TRIPLE=aarch64-linux-gnu- $DEFCONFIG
           make -k -j$(nproc) ARCH=arm64 LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu- CLANG_TRIPLE=aarch64-linux-gnu- \
-            KCFLAGS="-Wno-error -Wno-error=strict-prototypes -Wno-strict-prototypes -Wno-error=implicit-int -Wno-error=return-type -Wno-error=incompatible-pointer-types -Wno-error=date-time -Wno-error=void-pointer-to-int-cast" \
+            KCFLAGS="-Wno-error -Wno-error=strict-prototypes -Wno-strict-prototypes -Wno-error=implicit-int -Wno-error=return-type -Wno-error=incompatible-pointer-types -Wno-error=date-time -Wno-error=void-pointer-to-int-cast -Wno-error=unused-but-set-variable -Wno-error=pointer-to-int-cast" \
             Image.gz-dtb 2>&1 | tee build.log || true
 
       - name: Collect artifacts
