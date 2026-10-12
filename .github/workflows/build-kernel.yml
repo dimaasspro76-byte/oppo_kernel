@@ -1,0 +1,74 @@
+name: Build kernel (A17, BORE)
+
+on:
+  workflow_dispatch:
+    inputs:
+      defconfig:
+        description: "defconfig name"
+        required: true
+        default: "k65v1_64_bsp_defconfig"
+  push:
+    branches: [ "bore-a17-4.19" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+    env:
+      DEFCONFIG: ${{ github.event.inputs.defconfig || 'k65v1_64_bsp_defconfig' }}
+    steps:
+      # The kernel repo goes into kernel-src/ so that the relative symlinks
+      # (../../vendor/...) resolve to $GITHUB_WORKSPACE/vendor/...
+      - uses: actions/checkout@v4
+        with:
+          path: kernel-src
+
+      - name: Fetch vendor/oplus (OPPO proprietary subsystems, sparse clone)
+        run: |
+          git clone -q --depth 1 --filter=blob:none --sparse --no-checkout \
+            -b oppo/mt6765_s_12.1.1_a17 \
+            https://github.com/oppo-source/android_kernel_modules_oppo_mt6765.git vendor-src
+          git -C vendor-src sparse-checkout set vendor/oplus
+          git -C vendor-src checkout -q
+          mv vendor-src/vendor "$GITHUB_WORKSPACE/vendor"
+          ls "$GITHUB_WORKSPACE/vendor/oplus" | head
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm gcc-aarch64-linux-gnu flex bison bc \
+            libssl-dev libelf-dev python3 cpio rsync
+
+      - name: Work around tracepoint include paths
+        # Trace headers use "./xxx.h" which must resolve relative to the
+        # directory of the tracepoint source file. Add -I$(src) to those dirs.
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          for d in $(grep -rl "CREATE_TRACE_POINTS" --include=*.c kernel-src vendor | xargs -n1 dirname | sort -u); do
+            m="$d/Makefile"
+            [ -f "$m" ] || continue
+            grep -q 'ccflags-y += -I$(src)' "$m" || printf '\nccflags-y += -I$(src)\n' >> "$m"
+          done
+
+      - name: Build
+        working-directory: kernel-src
+        run: |
+          make ARCH=arm64 LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu- CLANG_TRIPLE=aarch64-linux-gnu- $DEFCONFIG
+          make -j$(nproc) ARCH=arm64 LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu- CLANG_TRIPLE=aarch64-linux-gnu- \
+            KCFLAGS="-Wno-error -Wno-error=strict-prototypes -Wno-strict-prototypes -Wno-error=implicit-int -Wno-error=return-type -Wno-error=incompatible-pointer-types -Wno-error=date-time" \
+            Image.gz-dtb
+
+      - name: Collect artifacts
+        working-directory: kernel-src
+        run: |
+          mkdir -p out
+          cp arch/arm64/boot/Image.gz-dtb out/ 2>/dev/null || true
+          cp arch/arm64/boot/Image out/ 2>/dev/null || true
+          cp .config out/defconfig-used
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kernel-a17-bore
+          path: kernel-src/out/
+          retention-days: 14
